@@ -1,0 +1,154 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+
+<!-- HEADER -->
+<head>
+	<!-- Set-up important tags + scripts + load css -->
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+	<title>JSON Reducer</title>
+	<meta name="robots" content="index" />
+	<meta name="author" content="Ben Geiling" />
+	<link rel="stylesheet" type="text/css" href="main.css" media="screen" />
+
+	<!-- Include JQuery -->
+	<script type="text/javascript" src="scripts/jquery-2.1.4.min.js"></script>
+
+	<!-- Include file line reader script -->
+	<script type="text/javascript" src="scripts/LineReader.js"></script>
+
+	<!-- Include file handler script -->
+	<script type="text/javascript" src="scripts/fileHandler.js"></script>
+</head>
+
+<!-- BODY -->
+<body>
+	<!-- Provide for basic UI -->
+    <div id="floater-top"></div>
+	<div id="center">
+        <div id="title">JSON Reducer</div>
+        Pick a geoJSON file to convert/edit bellow
+        <div id="container">
+            <input type="file" id="file">
+            <button id="read">Start</button>
+            <a href="" id="output">[output]</a>
+            <div id="input">
+                Time Step (seconds)<br><input type="text" id="timeStep" class="variables"></input>
+                <br><br>
+                Style: (pin/line)<br><input type="text" id="style" class="variables"></input>
+            </div>
+        </div>
+    </div>
+</body>
+
+<script>
+    $('#center').width($('#container').width()); //Size the DIV to center it
+    $('#timeStep').val("86400"); var TIME_STEP = 86400000;
+    $('#style').val("line"); var OUTPUT_TYPE = "line";
+
+	//Setup global variables
+	var matchedLine = 0;
+	var timeLast = 0; //Set this to zero first since no last time
+	var timeCurrent;
+
+	var HUMAN_READABLE = false;
+
+	var date;
+	var lines;
+	var latitude = 0;
+	var longitude = 0;
+	//86400000 ms in a day, log only values 1 day apart
+	//3600000 ms in a hour
+
+	//Grab the relevent data from the JSON file
+	function grabValue(string) {
+		//Find the value string
+		var value = string.split(':')[1];
+
+		//Remove whitespace
+		value = value.replace(/\s+/g, '');
+
+		//Remove ,
+		value = value.replace(/,+/g, '');
+
+		//Remove "
+		value = value.replace(/"+/g, '');
+
+		//Convert to Number
+		value = Number(value);
+
+		return value;
+	}
+
+	//When read button is clicked start reading the file
+	$('#read').click(function () {
+
+        var fileName = $('#file').val().split('\\').pop(); //Get filename without fakepath
+        objectName = fileName.split('.').shift(); //Set the file name for output
+
+        TIME_STEP = $('#timeStep').val();
+        OUTPUT_TYPE = $('#style').val();
+
+		if (!outputText) {
+			outputText = "<?xml version='1.0' encoding='UTF-8'?>\n";
+			outputText += "<kml xmlns='http://www.opengis.net/kml/2.2'>\n";
+			outputText += "<Document>\n";
+			outputText += "<name>TEST LAYER</name>\n";
+			outputText += "<Placemark>\n";
+			outputText += "<name>TEST LINE</name>\n";
+			outputText += "<styleUrl>#line-4186F0-4-nodesc</styleUrl>\n";
+			outputText += "<ExtendedData>\n";
+			outputText += "</ExtendedData>\n";
+			outputText += "<LineString>\n";
+			outputText += "<tessellate>1</tessellate>\n";
+			outputText += "<coordinates>";
+		}
+
+		fileRead('#file');
+	});
+
+	//This function is called by fileRead for each line of the file
+	function fileLine(line) {extractObjects(line);}
+
+	//Extract objects from the csv and convert to JS
+	function extractObjects(line) {
+
+		if (~line.indexOf("timestampMs")) {
+			matchedLine = 1; //Found a match
+			timeCurrent = grabValue(line); //Set the current time
+			date = new Date(timeCurrent).toUTCString();
+		} else if (matchedLine === 1) {
+			matchedLine = 2; //Next line
+			latitude = grabValue(line)/10000000;
+		} else if (matchedLine === 2) {
+			matchedLine = 0; //Reset
+			longitude = grabValue(line)/10000000;
+
+			//Check if it has been long enough to record location
+			if (Math.abs(timeCurrent - timeLast) > TIME_STEP) {
+
+				if (latitude && longitude) {
+					//Check if human readable date is required
+					if (HUMAN_READABLE) {
+						outputText += "time: " + date + " lat: " + latitude + " long: " + longitude + '\n';
+					} else {
+						if (OUTPUT_TYPE === "pin") {
+							outputText += '&emsp;&lt;Placemark&gt;<br>';
+							outputText += '&emsp;&emsp;&lt;name&gt;' + date + '&lt;/name&gt;<br>';
+							outputText += '&emsp;&emsp;&lt;description&gt;' + 'N/A' + '&lt;/description&gt;<br>';
+							outputText += '&emsp;&emsp;&lt;Point&gt;&lt;coordinates&gt;' + longitude + "," + latitude + ',0' + '&lt;/coordinates&gt;&lt;/Point&gt;<br>';
+							outputText += '&emsp;&lt;/Placemark&gt;<br>';
+						} else if (OUTPUT_TYPE === "line") {
+							outputText += longitude + ',' + latitude + ',0.0 '
+						}
+					}
+
+					//Set last time to current time
+					timeLast = timeCurrent;
+				}
+			}
+		}
+
+		lineCount++;
+
+	}
+</script>
